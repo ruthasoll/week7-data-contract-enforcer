@@ -1,0 +1,84 @@
+name: Data Contract Enforcer CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  enforce-contracts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas ydata-profiling pyyaml jsonschema gitpython
+
+      - name: Run ContractGenerator (Week 3 + Week 5)
+        run: |
+          python contracts/generator.py \
+            --source outputs/week3/extractions.jsonl \
+            --contract-id week3-document-refinery-extractions \
+            --lineage outputs/week4/lineage_snapshots.jsonl \
+            --output generated_contracts/
+
+          python contracts/generator.py \
+            --source outputs/week5/events.jsonl \
+            --contract-id week5-events \
+            --lineage outputs/week4/lineage_snapshots.jsonl \
+            --output generated_contracts/
+
+      - name: Run ValidationRunner on clean data
+        run: |
+          python contracts/runner.py \
+            --contract generated_contracts/week3_extractions.yaml \
+            --data outputs/week3/extractions.jsonl \
+            --output validation_reports/ci_clean.json
+
+      - name: Inject violation and test detection
+        run: |
+          python create_violation.py
+          python contracts/runner.py \
+            --contract generated_contracts/week3_extractions.yaml \
+            --data outputs/week3/extractions_violated.jsonl \
+            --output validation_reports/ci_violated.json
+
+      - name: Run ViolationAttributor
+        run: |
+          python contracts/attributor.py \
+            --violation validation_reports/ci_violated.json \
+            --lineage outputs/week4/lineage_snapshots.jsonl \
+            --contract generated_contracts/week3_extractions.yaml \
+            --output violation_log/ci_violations.jsonl
+
+      - name: Check for critical failures
+        run: |
+          echo "Checking for CRITICAL failures..."
+          if grep -q '"severity": "CRITICAL"' validation_reports/ci_violated.json; then
+            echo "❌ CRITICAL contract violation detected!"
+            echo "See validation_reports/ci_violated.json for details."
+            exit 1
+          else
+            echo "✅ No CRITICAL violations found in this run."
+          fi
+
+      - name: Archive reports (for debugging)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-enforcement-reports
+          path: |
+            generated_contracts/
+            validation_reports/
+            violation_log/
