@@ -1,0 +1,41 @@
+version: 2
+models:
+- name: week3_extractions
+  description: Auto-generated contract for outputs/week3/extractions.jsonl
+  columns:
+  - name: doc_id
+    description: auto-profiled dtype=object, cardinality=4
+    tests:
+    - not_null
+  - name: source_path
+    description: auto-profiled dtype=object, cardinality=1
+    tests:
+    - not_null
+  - name: source_hash
+    description: auto-profiled dtype=object, cardinality=1
+    tests:
+    - not_null
+  - name: extracted_facts
+    description: auto-profiled dtype=object, cardinality=4
+    tests:
+    - not_null
+  - name: entities
+    description: auto-profiled dtype=object, cardinality=1
+    tests:
+    - not_null
+  - name: extraction_model
+    description: auto-profiled dtype=object, cardinality=1
+    tests:
+    - not_null
+  - name: processing_time_ms
+    description: 'Numeric profile: mean=21885, stddev=329.09'
+    tests:
+    - not_null
+  - name: token_count
+    description: auto-profiled dtype=object, cardinality=1
+    tests:
+    - not_null
+  - name: extracted_at
+    description: auto-profiled dtype=datetime64[ns, UTC], cardinality=4
+    tests:
+    - not_null
