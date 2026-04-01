@@ -1,0 +1,90 @@
+kind: DataContract
+apiVersion: v3.0.0
+id: week3_extractions
+info:
+  title: Auto-generated contract for extractions
+  version: 1.0.0
+  owner: week3
+  description: Auto-generated contract for outputs/week3/extractions.jsonl
+servers:
+  local:
+    type: local
+    path: outputs/week3/extractions.jsonl
+    format: jsonl
+terms:
+  usage: Internal inter-system data contract. Do not publish.
+  limitations: See schema clauses for field-level constraints. Any change to fields
+    listed in lineage.breaking_if_changed is breaking.
+schema:
+  doc_id:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=4
+    format: uuid
+  source_path:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1
+  source_hash:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1
+    pattern: ^[a-f0-9]{64}$
+  extracted_facts:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=4
+    items:
+      confidence:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "Numeric profile: mean=0.95, stddev=0.057735 IMPORTANT: MUST\
+          \ be float in 0.0\u20131.0. BREAKING if changed to 0-100."
+  entities:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1
+  extraction_model:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1
+  processing_time_ms:
+    type: number
+    required: true
+    description: 'Numeric profile: mean=21885, stddev=329.09'
+    minimum: 21600.0
+    maximum: 22170.0
+  token_count:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1
+  extracted_at:
+    type: datetime64[ns, UTC]
+    required: true
+    description: auto-profiled dtype=datetime64[ns, UTC], cardinality=4
+quality:
+  type: SodaChecks
+  specification:
+    checks:
+    - check_id: week3_extractions.extracted_facts.confidence.range
+      column: extracted_facts[*].confidence
+      check: range
+      expected:
+        minimum: 0.0
+        maximum: 1.0
+      severity: CRITICAL
+    - check_id: week3_extractions.row_count
+      check: row_count
+      expected:
+        minimum: 1
+      severity: HIGH
+lineage:
+  upstream: []
+  downstream:
+  - id: file::src/week4/cartographer.py
+    description: cartographer.py (src/week4/cartographer.py)
+    fields_consumed: []
+  breaking_if_changed:
+  - extracted_facts.confidence
+generated_at: '2026-04-01T20:34:17Z'
