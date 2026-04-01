@@ -1,0 +1,317 @@
+{
+  "report_id": "27c1b7f2-8923-473b-ad94-67199f0f7d1f",
+  "contract_id": "week3_extractions",
+  "snapshot_id": "b71fc0b1691747eb68d96095f08a0fb7d7a1db8d32e360aa4895ec23ca2e5bb2",
+  "run_timestamp": "2026-04-01T22:48:48Z",
+  "total_checks": 24,
+  "passed": 18,
+  "failed": 5,
+  "warned": 0,
+  "errored": 1,
+  "results": [
+    {
+      "check_id": "week3_extractions.doc_id.required",
+      "column_name": "doc_id",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field doc_id present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.doc_id.type",
+      "column_name": "doc_id",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field doc_id present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.doc_id.format",
+      "column_name": "doc_id",
+      "check_type": "format",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "format=uuid",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field doc_id present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.source_path.required",
+      "column_name": "source_path",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field source_path present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.source_path.type",
+      "column_name": "source_path",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field source_path present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.source_hash.required",
+      "column_name": "source_hash",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field source_hash present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.source_hash.type",
+      "column_name": "source_hash",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field source_hash present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.source_hash.format",
+      "column_name": "source_hash",
+      "check_type": "format",
+      "status": "FAIL",
+      "actual_value": "failing=4",
+      "expected": "format=^[a-f0-9]{64}$",
+      "severity": "CRITICAL",
+      "records_failing": 4,
+      "sample_failing": [
+        "88145efb1c21f648b24d5721a3e83787d865722f0622624457e2139938a7fe4c"
+      ],
+      "message": "4 rows failing format ^[a-f0-9]{64}$"
+    },
+    {
+      "check_id": "week3_extractions.extracted_facts.required",
+      "column_name": "extracted_facts",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field extracted_facts present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.extracted_facts.type",
+      "column_name": "extracted_facts",
+      "check_type": "type",
+      "status": "FAIL",
+      "actual_value": "failing=4",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 4,
+      "sample_failing": [
+        "[{'fact_id': '075596d8-d7c3-4aa8-848c-c1bb1730c6fc', 'text': 'Document processed with layout_aware strategy. Confidence: 0.9', 'entity_refs': [], 'confidence': 90.0, 'page_ref': None, 'source_excerpt': 'Extracted from CBE ANNUAL REPORT 2023-24'}]",
+        "[{'fact_id': '20dda37b-db9f-4774-bf46-130a7938b981', 'text': 'Document processed with layout_aware strategy. Confidence: 1.0', 'entity_refs': [], 'confidence': 100.0, 'page_ref': None, 'source_excerpt': 'Extracted from CBE ANNUAL REPORT 2023-24'}]",
+        "[{'fact_id': '61f8e487-e664-47ff-a5d5-276c944483df', 'text': 'Document processed with layout_aware strategy. Confidence: 0.9', 'entity_refs': [], 'confidence': 90.0, 'page_ref': None, 'source_excerpt': 'Extracted from CBE ANNUAL REPORT 2023-24'}]",
+        "[{'fact_id': '11295acc-5183-4065-b4ae-f1a86821af75', 'text': 'Document processed with layout_aware strategy. Confidence: 1.0', 'entity_refs': [], 'confidence': 100.0, 'page_ref': None, 'source_excerpt': 'Extracted from CBE ANNUAL REPORT 2023-24'}]"
+      ],
+      "message": "4 rows with type != string"
+    },
+    {
+      "check_id": "week3_extractions.entities.required",
+      "column_name": "entities",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field entities present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.entities.type",
+      "column_name": "entities",
+      "check_type": "type",
+      "status": "FAIL",
+      "actual_value": "failing=4",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 4,
+      "sample_failing": [
+        "[]"
+      ],
+      "message": "4 rows with type != string"
+    },
+    {
+      "check_id": "week3_extractions.extraction_model.required",
+      "column_name": "extraction_model",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field extraction_model present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.extraction_model.type",
+      "column_name": "extraction_model",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field extraction_model present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.processing_time_ms.required",
+      "column_name": "processing_time_ms",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field processing_time_ms present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.processing_time_ms.type",
+      "column_name": "processing_time_ms",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==number",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field processing_time_ms present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.processing_time_ms.range",
+      "column_name": "processing_time_ms",
+      "check_type": "range",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "min=21600.0 max=22170.0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field processing_time_ms present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.token_count.required",
+      "column_name": "token_count",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field token_count present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.token_count.type",
+      "column_name": "token_count",
+      "check_type": "type",
+      "status": "FAIL",
+      "actual_value": "failing=4",
+      "expected": "type==string",
+      "severity": "CRITICAL",
+      "records_failing": 4,
+      "sample_failing": [
+        "{'input': 4200, 'output': 890}"
+      ],
+      "message": "4 rows with type != string"
+    },
+    {
+      "check_id": "week3_extractions.extracted_at.required",
+      "column_name": "extracted_at",
+      "check_type": "required",
+      "status": "PASS",
+      "actual_value": "null_fraction=0",
+      "expected": "null_fraction==0",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field extracted_at present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.extracted_at.type",
+      "column_name": "extracted_at",
+      "check_type": "type",
+      "status": "PASS",
+      "actual_value": "failing=0",
+      "expected": "type==datetime64[ns, UTC]",
+      "severity": "CRITICAL",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "required field extracted_at present with null_fraction=0"
+    },
+    {
+      "check_id": "week3_extractions.extracted_facts.confidence.range",
+      "column_name": "extracted_facts[*].confidence",
+      "check_type": "range",
+      "status": "FAIL",
+      "actual_value": "max=100.0, mean=95.0",
+      "expected": "min=0.0 max=1.0",
+      "severity": "CRITICAL",
+      "records_failing": 4,
+      "sample_failing": [
+        "075596d8-d7c3-4aa8-848c-c1bb1730c6fc",
+        "20dda37b-db9f-4774-bf46-130a7938b981",
+        "61f8e487-e664-47ff-a5d5-276c944483df",
+        "11295acc-5183-4065-b4ae-f1a86821af75"
+      ],
+      "message": "confidence is in 0-100 range or otherwise >1.0; Breaking change detected."
+    },
+    {
+      "check_id": "week3_extractions.row_count",
+      "column_name": "",
+      "check_type": "row_count",
+      "status": "ERROR",
+      "actual_value": "unsupported_check",
+      "expected": "{\"minimum\": 1}",
+      "severity": "LOW",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "unsupported check type by validation runner"
+    },
+    {
+      "check_id": "week3_extractions.processing_time_ms.statistical_drift",
+      "column_name": "processing_time_ms",
+      "check_type": "statistical_drift",
+      "status": "PASS",
+      "actual_value": "mean=21885, stddev=329.09",
+      "expected": "baseline_mean=21885.0, baseline_stddev=329.0896534380867",
+      "severity": "LOW",
+      "records_failing": 0,
+      "sample_failing": [],
+      "message": "mean deviation 0.00 stddevs"
+    }
+  ]
+}
