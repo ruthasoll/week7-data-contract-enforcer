@@ -133,7 +133,14 @@ def expand_nested(df, field_path):
 
 # Type checking helper
 
-def check_type(value, expected_type):
+# Type checking helper (renamed to avoid closure/name shadowing issues)
+# The original implementation used the name `check_type`, which later in this
+# module is also used as a local variable name when iterating check definitions.
+# That produced a closure/scoping problem when lambdas captured the name.
+# Renaming to `is_type` and avoiding late-bound lambdas fixes the issue.
+def is_type(value, expected_type):
+    """Return True if value matches expected_type. Treats nulls as valid (handled by required checks)."""
+    # consider pandas NA as null
     if pd.isnull(value):
         return True
     if expected_type == 'string':
@@ -146,6 +153,7 @@ def check_type(value, expected_type):
         return isinstance(value, (bool, np.bool_))
     if expected_type == 'array':
         return isinstance(value, list)
+    # fallback: accept
     return True
 
 # Format checks (uuid/date-time simple checks)
@@ -263,21 +271,104 @@ def run_checks(contract, df, snapshot_id):
                 else:
                     # vectorized type check: count rows failing
                     col = df[column_name]
-                    mask_fail = col.apply(lambda v: not check_type(v, typ))
-                    failing = int(mask_fail.sum())
-                    if failing > 0:
-                        status = STATUS_FAIL
-                        severity = SEVERITY_CRITICAL
-                        records_failing = failing
-                        sample_failing = list(col[mask_fail].dropna().astype(str).unique()[:5])
-                        failed += 1
-                        message = f"{failing} rows with type != {typ}"
-                    else:
-                        status = STATUS_PASS
+                    # Avoid late-binding lambda closure issues by creating a dedicated checker function
+                    def make_type_checker(expected_type):
+                        def checker(v):
+                            try:
+                                return not is_type(v, expected_type)
+                            except Exception:
+                                # treat errors as failures to be conservative
+                                return True
+                        return checker
+                    try:
+                        mask_fail = col.apply(make_type_checker(typ))
+                        failing = int(mask_fail.sum())
+                        if failing > 0:
+                            status = STATUS_FAIL
+                            severity = SEVERITY_CRITICAL
+                            records_failing = failing
+                            sample_failing = list(col[mask_fail].dropna().astype(str).unique()[:5])
+                            failed += 1
+                            message = f"{failing} rows with type != {typ}"
+                        else:
+                            status = STATUS_PASS
+                            severity = SEVERITY_CRITICAL
+                            records_failing = 0
+                            sample_failing = []
+                            passed += 1
+                    except Exception as e:
+                        # never crash validation runner; emit ERROR for this check
+                        status = STATUS_ERROR
                         severity = SEVERITY_CRITICAL
                         records_failing = 0
                         sample_failing = []
-                        passed += 1
+                        message = f"type check failed with exception: {e}"
+                        errored += 1
+
+                    # If this is an array type and has item definitions, also validate the items' types
+                    if typ == 'array' and isinstance(field_def, dict):
+                        items_def = field_def.get('items', {}) or {}
+                        if isinstance(items_def, dict):
+                            for subfield, subdef in items_def.items():
+                                # run type check for nested item field using expand_nested
+                                nested_expr = f"{field_name}[*].{subfield}"
+                                nested_df = expand_nested(df, nested_expr)
+                                if nested_df.empty:
+                                    continue
+                                expected_subtype = subdef.get('type')
+                                if not expected_subtype:
+                                    continue
+                                # create checker for subtype
+                                checker = make_type_checker(expected_subtype)
+                                try:
+                                    nested_mask_fail = nested_df['value'].apply(checker)
+                                    nested_failing = int(nested_mask_fail.sum())
+                                    total_checks += 1
+                                    chk_id = f"{contract_id}.{field_name}.items.{subfield}.type"
+                                    if nested_failing > 0:
+                                        failed += 1
+                                        results.append({
+                                            "check_id": chk_id,
+                                            "column_name": nested_expr,
+                                            "check_type": "type",
+                                            "status": STATUS_FAIL,
+                                            "actual_value": f"failing={nested_failing}",
+                                            "expected": f"type=={expected_subtype}",
+                                            "severity": SEVERITY_CRITICAL,
+                                            "records_failing": nested_failing,
+                                            "sample_failing": list(nested_df.loc[nested_mask_fail, 'fact_id'].dropna().astype(str).unique()[:5]),
+                                            "message": f"{nested_failing} nested rows with type != {expected_subtype}"
+                                        })
+                                    else:
+                                        passed += 1
+                                        results.append({
+                                            "check_id": chk_id,
+                                            "column_name": nested_expr,
+                                            "check_type": "type",
+                                            "status": STATUS_PASS,
+                                            "actual_value": "failing=0",
+                                            "expected": f"type=={expected_subtype}",
+                                            "severity": SEVERITY_CRITICAL,
+                                            "records_failing": 0,
+                                            "sample_failing": [],
+                                            "message": "nested items type ok"
+                                        })
+                                except Exception as e:
+                                    total_checks += 1
+                                    errored += 1
+                                    results.append({
+                                        "check_id": f"{contract_id}.{field_name}.items.{subfield}.type.error",
+                                        "column_name": nested_expr,
+                                        "check_type": "type",
+                                        "status": STATUS_ERROR,
+                                        "actual_value": "error",
+                                        "expected": f"type=={expected_subtype}",
+                                        "severity": SEVERITY_CRITICAL,
+                                        "records_failing": 0,
+                                        "sample_failing": [],
+                                        "message": f"error checking nested item types: {e}"
+                                    })
+
                 results.append({
                     "check_id": check_id,
                     "column_name": column_name,
