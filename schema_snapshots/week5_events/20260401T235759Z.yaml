@@ -1,0 +1,127 @@
+kind: DataContract
+apiVersion: v3.0.0
+id: week5_events
+info:
+  title: Auto-generated contract for events
+  version: 1.0.0
+  owner: week5
+  description: Auto-generated contract for outputs/week5/events.jsonl
+servers:
+  local:
+    type: local
+    path: outputs/week5/events.jsonl
+    format: jsonl
+terms:
+  usage: Internal inter-system data contract. Do not publish.
+  limitations: See schema clauses for field-level constraints. Any change to fields
+    listed in lineage.breaking_if_changed is breaking.
+schema:
+  event_id:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1198
+    format: uuid
+    unique: true
+  event_type:
+    type: string
+    required: true
+    description: PascalCase event type. Must be registered. Cardinality=34 observed.
+      BREAKING if existing values removed.
+    pattern: ^[A-Z][a-zA-Z0-9]+$
+    enum_observed:
+    - ApplicationSubmitted
+    - DocumentUploadRequested
+    - PackageCreated
+    - ApplicationSubmitted
+    - DocumentUploadRequested
+  aggregate_id:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=151
+    format: uuid
+    unique: false
+  aggregate_type:
+    type: string
+    required: true
+    description: PascalCase aggregate type. Must be registered. Cardinality=1 observed.
+      BREAKING if existing values removed.
+    pattern: ^[A-Z][a-zA-Z0-9]+$
+    enum_observed:
+    - AgentSession
+    - AgentSession
+    - AgentSession
+    - AgentSession
+    - AgentSession
+  sequence_number:
+    type: integer
+    required: true
+    description: 'Monotonically increasing integer per aggregate_id. No gaps, no duplicates.
+      Profiled range: min=1, max=13. BREAKING if semantics change.'
+    minimum: 1
+    maximum: 13.0
+  payload:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=1198
+  metadata:
+    type: string
+    required: true
+    description: auto-profiled dtype=object, cardinality=151
+  schema_version:
+    type: number
+    required: true
+    description: 'Numeric profile: mean=1, stddev=0'
+    minimum: 1.0
+    maximum: 1.0
+  occurred_at:
+    type: datetime64[ns]
+    required: true
+    description: auto-profiled dtype=datetime64[ns], cardinality=828
+  recorded_at:
+    type: datetime64[ns]
+    required: true
+    description: auto-profiled dtype=datetime64[ns], cardinality=828
+quality:
+  type: SodaChecks
+  specification:
+    checks:
+    - check_id: week5_events.row_count
+      check: row_count
+      expected:
+        minimum: 1
+      severity: HIGH
+    - check_id: week5_events.recorded_at_gte_occurred_at
+      column: recorded_at
+      check: custom
+      description: "recorded_at must be >= occurred_at (temporal ordering contract).\
+        \ CRITICAL \u2014 violation = clock skew or data corruption."
+      severity: CRITICAL
+    - check_id: week5_events.sequence_monotonic_per_aggregate
+      column: sequence_number
+      check: custom
+      description: sequence_number must be monotonically increasing per aggregate_id
+        with no gaps or duplicates.
+      severity: CRITICAL
+    - check_id: week5_events.event_type_pascal_case
+      column: event_type
+      check: pattern
+      expected:
+        pattern: ^[A-Z][a-zA-Z0-9]+$
+      severity: HIGH
+    - check_id: week5_events.missing_event_id
+      column: event_id
+      check: missing_count
+      expected: 0
+      severity: CRITICAL
+    - check_id: week5_events.duplicate_event_id
+      column: event_id
+      check: duplicate_count
+      expected: 0
+      severity: CRITICAL
+lineage:
+  upstream: []
+  downstream:
+  - id: file::src/week4/cartographer.py
+    description: cartographer.py (src/week4/cartographer.py)
+    fields_consumed: []
+generated_at: '2026-04-01T23:57:59Z'

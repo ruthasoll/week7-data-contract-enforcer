@@ -7,6 +7,9 @@ models:
     description: auto-profiled dtype=object, cardinality=4
     tests:
     - not_null
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(doc_id, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        name: doc_id_uuid_format
   - name: source_path
     description: auto-profiled dtype=object, cardinality=1
     tests:
@@ -15,6 +18,9 @@ models:
     description: auto-profiled dtype=object, cardinality=1
     tests:
     - not_null
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(source_hash, '^[a-f0-9]{64}$')
+        name: source_hash_sha256_format
   - name: extracted_facts
     description: auto-profiled dtype=object, cardinality=4
     tests:
@@ -31,6 +37,9 @@ models:
     description: 'Numeric profile: mean=21885, stddev=329.09'
     tests:
     - not_null
+    - dbt_utils.expression_is_true:
+        expression: processing_time_ms >= 21600.0
+        name: processing_time_ms_minimum
   - name: token_count
     description: auto-profiled dtype=object, cardinality=1
     tests:
@@ -39,3 +48,8 @@ models:
     description: auto-profiled dtype=datetime64[ns, UTC], cardinality=4
     tests:
     - not_null
+
+# Cross-column constraints (implement as custom macros):
+# - extracted_facts[*].confidence must be in [0.0, 1.0] (CRITICAL — range check)
+# - extracted_facts[*].entity_refs must reference IDs in entities[] (referential integrity)
+# - entities[*].type in {PERSON,ORG,LOCATION,DATE,AMOUNT,OTHER}

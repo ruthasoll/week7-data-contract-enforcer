@@ -1,0 +1,73 @@
+version: 2
+models:
+- name: week5_events
+  description: Auto-generated contract for outputs/week5/events.jsonl
+  columns:
+  - name: event_id
+    description: auto-profiled dtype=object, cardinality=1198
+    tests:
+    - not_null
+    - unique
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(event_id, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        name: event_id_uuid_format
+  - name: event_type
+    description: PascalCase event type. Must be registered. Cardinality=34 observed.
+      BREAKING if existing values removed.
+    tests:
+    - not_null
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(event_type, '^[A-Z][a-zA-Z0-9]+$')
+        name: event_type_pattern
+  - name: aggregate_id
+    description: auto-profiled dtype=object, cardinality=151
+    tests:
+    - not_null
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(aggregate_id, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        name: aggregate_id_uuid_format
+  - name: aggregate_type
+    description: PascalCase aggregate type. Must be registered. Cardinality=1 observed.
+      BREAKING if existing values removed.
+    tests:
+    - not_null
+    - dbt_utils.expression_is_true:
+        expression: regexp_like(aggregate_type, '^[A-Z][a-zA-Z0-9]+$')
+        name: aggregate_type_pattern
+  - name: sequence_number
+    description: 'Monotonically increasing integer per aggregate_id. No gaps, no duplicates.
+      Profiled range: min=1, max=13. BREAKING if semantics change.'
+    tests:
+    - not_null
+    - dbt_utils.expression_is_true:
+        expression: sequence_number >= 1
+        name: sequence_number_minimum
+  - name: payload
+    description: auto-profiled dtype=object, cardinality=1198
+    tests:
+    - not_null
+  - name: metadata
+    description: auto-profiled dtype=object, cardinality=151
+    tests:
+    - not_null
+  - name: schema_version
+    description: 'Numeric profile: mean=1, stddev=0'
+    tests:
+    - not_null
+    - dbt_utils.expression_is_true:
+        expression: schema_version >= 1.0
+        name: schema_version_minimum
+  - name: occurred_at
+    description: auto-profiled dtype=datetime64[ns], cardinality=828
+    tests:
+    - not_null
+  - name: recorded_at
+    description: auto-profiled dtype=datetime64[ns], cardinality=828
+    tests:
+    - not_null
+
+# Cross-column constraints (implement as custom macros):
+# - recorded_at >= occurred_at (temporal ordering, CRITICAL)
+# - sequence_number monotonically increasing per aggregate_id (no gaps/duplicates, CRITICAL)
+# - payload validates against event_type JSON Schema in registry
+# - metadata.correlation_id must be a valid UUID (not null)

@@ -50,7 +50,7 @@ def detect_string_pattern(values):
     values = [v for v in values if isinstance(v, str) and v]
     if not values:
         return None
-    sample = values[:10]
+    sample = [values[i] for i in range(min(10, len(values)))]
     try:
         if all(pd.Series(sample).str.match(UUID_REGEX, na=False)):
             return "uuid"
@@ -108,7 +108,7 @@ def summarize_column(series):
         unique = int(safe_vals.nunique(dropna=True))
     # sample values: convert complex objects to readable form
     # sample values: take up to first 5 non-null rows and serialize complex objects for readability
-    sample_vals = []
+    sample_vals: list = []
     for v in series.dropna().head(5):
         if isinstance(v, (list, dict)):
             try:
@@ -135,7 +135,7 @@ def summarize_column(series):
         pattern = detect_string_pattern(string_candidates)
     return {
         "dtype": dtype,
-        "null_fraction": round(null_frac, 6),
+        "null_fraction": float(f"{float(null_frac):.6f}"),
         "cardinality": int(unique),
         "sample_values": sample_vals,
         "dominant_pattern": pattern
@@ -238,34 +238,11 @@ def find_downstream_consumers(lineage_snapshot, source_hint=None):
 # -------------------------
 def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric_profiles, confidence_fields, lineage_consumers):
     now = iso_ts_now()
-    contract = {
-        "kind": "DataContract",
-        "apiVersion": "v3.0.0",
-        "id": contract_id,
-        "info": {
-            "title": info_title,
-            "version": "1.0.0",
-            "owner": contract_id.split('_')[0] if '_' in contract_id else "owner",
-            "description": f"Auto-generated contract for {source_path}"
-        },
-        "servers": {
-            "local": {"type": "local", "path": source_path, "format": "jsonl"}
-        },
-        "terms": {
-            "usage": "Internal inter-system data contract. Do not publish.",
-            "limitations": "See schema clauses for field-level constraints. Any change to fields listed in lineage.breaking_if_changed is breaking."
-        },
-        "schema": {},
-        "quality": {
-            "type": "SodaChecks",
-            "specification": {"checks": []}
-        },
-        "lineage": {
-            "upstream": [],
-            "downstream": lineage_consumers or []
-        },
-        "generated_at": now
-    }
+    schema_dict: dict = {}
+    quality_checks: list = []
+    lineage_downstream: list = lineage_consumers or []
+    lineage_upstream: list = []
+    lineage_breaking: list = []
 
     # top-level fields
     for col, meta in profiles.items():
@@ -285,7 +262,7 @@ def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric
             entry["format"] = "uuid"
         if meta.get("dominant_pattern") == "sha256":
             entry["pattern"] = "^[a-f0-9]{64}$"
-        contract["schema"][col] = entry
+        schema_dict[col] = entry
 
     # handle exploded nested numeric profiles (items)
     if numeric_profiles:
@@ -293,18 +270,18 @@ def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric
             parts = key.split('.')
             if len(parts) < 2:
                 # top-level numeric column
-                contract["schema"].setdefault(parts[0], {})
-                contract["schema"][parts[0]].update({
+                schema_dict.setdefault(parts[0], {})
+                schema_dict[parts[0]].update({
                     "type": "number",
                     "minimum": stats.get("min"),
                     "maximum": stats.get("max"),
                     "description": f"Numeric profile: mean={stats.get('mean'):.6g}, stddev={stats.get('stddev'):.6g}"
                 })
                 if "confidence" in parts[0].lower():
-                    contract["schema"][parts[0]]["minimum"] = 0.0
-                    contract["schema"][parts[0]]["maximum"] = 1.0
-                    contract["schema"][parts[0]]["description"] += " IMPORTANT: MUST be float in 0.0–1.0. BREAKING if changed to 0-100."
-                    contract["quality"]["specification"]["checks"].append({
+                    schema_dict[parts[0]]["minimum"] = 0.0
+                    schema_dict[parts[0]]["maximum"] = 1.0
+                    schema_dict[parts[0]]["description"] += " IMPORTANT: MUST be float in 0.0–1.0. BREAKING if changed to 0-100."
+                    quality_checks.append({
                         "check_id": f"{contract_id}.{parts[0]}.range",
                         "column": parts[0],
                         "check": "range",
@@ -315,9 +292,9 @@ def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric
 
             arr_name = parts[0]
             field_name = parts[1]
-            if arr_name not in contract["schema"]:
-                contract["schema"][arr_name] = {"type": "array", "items": {}}
-            items = contract["schema"][arr_name].get("items", {})
+            if arr_name not in schema_dict:
+                schema_dict[arr_name] = {"type": "array", "items": {}}
+            items = schema_dict[arr_name].get("items", {})
             items.setdefault(field_name, {})
             items[field_name].update({
                 "type": "number",
@@ -325,45 +302,166 @@ def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric
                 "maximum": stats.get("max"),
                 "description": f"Numeric profile: mean={stats.get('mean'):.6g}, stddev={stats.get('stddev'):.6g}"
             })
-            contract["schema"][arr_name]["items"] = items
+            schema_dict[arr_name]["items"] = items
 
             if "confidence" in field_name.lower():
                 items[field_name]["minimum"] = 0.0
                 items[field_name]["maximum"] = 1.0
                 items[field_name]["description"] = items[field_name]["description"] + " IMPORTANT: MUST be float in 0.0–1.0. BREAKING if changed to 0-100."
-                contract["quality"]["specification"]["checks"].append({
+                quality_checks.append({
                     "check_id": f"{contract_id}.{arr_name}.{field_name}.range",
                     "column": f"{arr_name}[*].{field_name}",
                     "check": "range",
                     "expected": {"minimum": 0.0, "maximum": 1.0},
                     "severity": "CRITICAL"
                 })
-                if "breaking_if_changed" not in contract["lineage"]:
-                    contract["lineage"]["breaking_if_changed"] = []
-                contract["lineage"]["breaking_if_changed"].append(f"{arr_name}.{field_name}")
+                lineage_breaking.append(f"{arr_name}.{field_name}")
 
-    contract["quality"]["specification"]["checks"].append({
+    quality_checks.append({
         "check_id": f"{contract_id}.row_count",
         "check": "row_count",
         "expected": {"minimum": 1},
         "severity": "HIGH"
     })
+
+    contract = {
+        "kind": "DataContract",
+        "apiVersion": "v3.0.0",
+        "id": contract_id,
+        "info": {
+            "title": info_title,
+            "version": "1.0.0",
+            "owner": contract_id.split('_')[0] if '_' in contract_id else "owner",
+            "description": f"Auto-generated contract for {source_path}"
+        },
+        "servers": {
+            "local": {"type": "local", "path": source_path, "format": "jsonl"}
+        },
+        "terms": {
+            "usage": "Internal inter-system data contract. Do not publish.",
+            "limitations": "See schema clauses for field-level constraints. Any change to fields listed in lineage.breaking_if_changed is breaking."
+        },
+        "schema": schema_dict,
+        "quality": {
+            "type": "SodaChecks",
+            "specification": {"checks": quality_checks}
+        },
+        "lineage": {
+            "upstream": lineage_upstream,
+            "downstream": lineage_downstream,
+            **({"breaking_if_changed": lineage_breaking} if lineage_breaking else {})
+        },
+        "generated_at": now
+    }
     return contract
 
 def generate_dbt_tests(contract, dbt_outpath):
-    model = {"version": 2, "models": [{"name": contract["id"], "description": contract["info"].get("description",""), "columns": []}]}
+    """Generate a rich dbt schema.yml from a Bitol contract.
+
+    Tests added beyond basic not_null:
+    - unique         — for fields with unique: true
+    - accepted_values — for fields with enum: [...]
+    - dbt_utils.expression_is_true — for UUID format, SHA-256 pattern,
+      temporal ordering, numeric positivity, and string patterns.
+    """
+    model_name = contract["id"]
+    model: dict = {
+        "version": 2,
+        "models": [{
+            "name": model_name,
+            "description": contract["info"].get("description", ""),
+            "columns": []
+        }]
+    }
+
+    UUID_REGEX = "'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"
+    SHA256_REGEX = "'^[a-f0-9]{64}$'"
+
     for col_name, col_def in contract.get("schema", {}).items():
-        col_entry = {"name": col_name, "description": col_def.get("description","")}
-        tests = []
+        col_entry = {
+            "name": col_name,
+            "description": col_def.get("description", "")
+        }
+        tests: list = []
+
+        # 1. not_null for required fields
         if col_def.get("required"):
             tests.append("not_null")
+
+        # 2. unique for unique=true fields
+        if col_def.get("unique"):
+            tests.append("unique")
+
+        # 3. accepted_values for enum fields
         if isinstance(col_def.get("enum"), list):
             tests.append({"accepted_values": {"values": col_def["enum"]}})
+
+        # 4. UUID format check
+        if col_def.get("format") == "uuid":
+            tests.append({
+                "dbt_utils.expression_is_true": {
+                    "expression": f"regexp_like({col_name}, {UUID_REGEX})",
+                    "name": f"{col_name}_uuid_format"
+                }
+            })
+
+        # 5. SHA-256 pattern check
+        pattern = col_def.get("pattern", "")
+        if "[a-f0-9]{64}" in pattern:
+            tests.append({
+                "dbt_utils.expression_is_true": {
+                    "expression": f"regexp_like({col_name}, {SHA256_REGEX})",
+                    "name": f"{col_name}_sha256_format"
+                }
+            })
+        elif pattern and col_def.get("format") != "uuid":
+            # generic pattern check (e.g. PascalCase, semver)
+            tests.append({
+                "dbt_utils.expression_is_true": {
+                    "expression": f"regexp_like({col_name}, '{pattern}')",
+                    "name": f"{col_name}_pattern"
+                }
+            })
+
+        # 6. Numeric minimum > 0 (positivity check)
+        if col_def.get("minimum") is not None and col_def.get("type") in ("integer", "number"):
+            minimum = col_def["minimum"]
+            if minimum >= 1:
+                tests.append({
+                    "dbt_utils.expression_is_true": {
+                        "expression": f"{col_name} >= {minimum}",
+                        "name": f"{col_name}_minimum"
+                    }
+                })
+
+        # 7. date-time fields: not future
+        if col_def.get("format") == "date-time":
+            tests.append({
+                "dbt_utils.expression_is_true": {
+                    "expression": f"{col_name} <= current_timestamp",
+                    "name": f"{col_name}_not_future"
+                }
+            })
+
         if tests:
             col_entry["tests"] = tests
         model["models"][0]["columns"].append(col_entry)
+
+    # Add critical cross-column notes as a YAML comment block at the end
     with open(dbt_outpath, "w", encoding="utf-8") as fh:
         yaml.safe_dump(model, fh, sort_keys=False)
+        fh.write("\n# Cross-column constraints (implement as custom macros):\n")
+        # Week-3 specific
+        if "week3" in model_name.lower() or "extraction" in model_name.lower():
+            fh.write("# - extracted_facts[*].confidence must be in [0.0, 1.0] (CRITICAL — range check)\n")
+            fh.write("# - extracted_facts[*].entity_refs must reference IDs in entities[] (referential integrity)\n")
+            fh.write("# - entities[*].type in {PERSON,ORG,LOCATION,DATE,AMOUNT,OTHER}\n")
+        # Week-5 specific
+        if "week5" in model_name.lower() or "event" in model_name.lower():
+            fh.write("# - recorded_at >= occurred_at (temporal ordering, CRITICAL)\n")
+            fh.write("# - sequence_number monotonically increasing per aggregate_id (no gaps/duplicates, CRITICAL)\n")
+            fh.write("# - payload validates against event_type JSON Schema in registry\n")
+            fh.write("# - metadata.correlation_id must be a valid UUID (not null)\n")
 
 # -------------------------
 # Main flow
@@ -443,16 +541,141 @@ def main():
     info_title = f"Auto-generated contract for {basename}"
     contract = build_bitol_contract(contract_id, info_title, source, profiles, numeric_profiles, confidence_fields, lineage_consumers)
 
-    if lineage_consumers:
-        contract["lineage"]["downstream"] = lineage_consumers
-    else:
-        if 'week3' in contract_id.lower():
-            contract["lineage"]["downstream"] = [{
-                "id": "week4-cartographer",
-                "description": "Cartographer ingests doc_id and extracted_facts as node metadata",
-                "fields_consumed": ["doc_id", "extracted_facts", "extraction_model"]
-            }]
-            contract["lineage"].setdefault("breaking_if_changed", []).extend(["extracted_facts.confidence", "doc_id"])
+    lineage_dict = contract.get("lineage")
+    if isinstance(lineage_dict, dict):
+        if lineage_consumers:
+            lineage_dict["downstream"] = lineage_consumers
+        else:
+            if 'week3' in contract_id.lower():
+                lineage_dict["downstream"] = [{
+                    "id": "week4-cartographer",
+                    "description": "Cartographer ingests doc_id and extracted_facts as node metadata",
+                    "fields_consumed": ["doc_id", "extracted_facts", "extraction_model"]
+                }]
+                bic = lineage_dict.get("breaking_if_changed")
+                breaking_list = bic if isinstance(bic, list) else []
+                breaking_list.extend(["extracted_facts.confidence", "doc_id"])
+                lineage_dict["breaking_if_changed"] = breaking_list
+            elif 'week5' in contract_id.lower() or 'event' in contract_id.lower():
+                lineage_dict["downstream"] = [
+                    {
+                        "id": "week7-data-contract-enforcer",
+                        "description": "Enforcer validates payload against event schema registry and checks sequence monotonicity",
+                        "fields_consumed": ["event_id", "event_type", "aggregate_id", "sequence_number", "payload", "schema_version"]
+                    },
+                    {
+                        "id": "week8-sentinel",
+                        "description": "Sentinel ingests violation events as data quality signals",
+                        "fields_consumed": ["event_id", "event_type", "payload", "occurred_at"]
+                    }
+                ]
+                bic = lineage_dict.get("breaking_if_changed")
+                breaking_list = bic if isinstance(bic, list) else []
+                breaking_list.extend([
+                    "event_id", "sequence_number", "aggregate_id", "occurred_at", "recorded_at"
+                ])
+                lineage_dict["breaking_if_changed"] = breaking_list    # ---- Week 5 / events: domain-specific schema enrichment ----
+    if 'week5' in contract_id.lower() or ('event_type' in profiles and 'sequence_number' in profiles):
+        schema = contract.get("schema")
+        if isinstance(schema, dict):
+            # Fix sequence_number: profiled as float due to pandas; correct to integer
+            seq_def = schema.get("sequence_number")
+            if isinstance(seq_def, dict):
+                seq_stats: dict = numeric_profiles.get("sequence_number", {})  # type: ignore[assignment]
+                seq_min = int(seq_stats.get("min", 1)) if isinstance(seq_stats, dict) else 1
+                seq_max = int(seq_stats.get("max", 1)) if isinstance(seq_stats, dict) else 1
+                seq_def["type"] = "integer"
+                seq_def["minimum"] = 1
+                seq_def["description"] = (
+                    "Monotonically increasing integer per aggregate_id. No gaps, no duplicates. "
+                    f"Profiled range: min={seq_min}, max={seq_max}. BREAKING if semantics change."
+                )
+
+            # Add PascalCase pattern to event_type and aggregate_type
+            for pascal_field in ("event_type", "aggregate_type"):
+                pf_def = schema.get(pascal_field)
+                if isinstance(pf_def, dict):
+                    cardinality = profiles.get(pascal_field, {}).get("cardinality", "?")
+                    pf_def["pattern"] = "^[A-Z][a-zA-Z0-9]+$"
+                    pf_def["description"] = (
+                        f"PascalCase {pascal_field.replace('_', ' ')}. Must be registered. "
+                        f"Cardinality={cardinality} observed. BREAKING if existing values removed."
+                    )
+
+            # Inject observed sample values as enum_observed hint
+            for enum_field in ("event_type", "aggregate_type"):
+                ef_def = schema.get(enum_field)
+                if isinstance(ef_def, dict):
+                    obs_dict = profiles.get(enum_field)
+                    if isinstance(obs_dict, dict):
+                        sample_values = obs_dict.get("sample_values", [])
+                        if isinstance(sample_values, list) and sample_values:
+                            ef_def["enum_observed"] = [str(v) for v in sample_values]
+
+            # Mark uuid format and unique on event_id / aggregate_id
+            for uuid_field in ("event_id", "aggregate_id"):
+                uf_def = schema.get(uuid_field)
+                if isinstance(uf_def, dict):
+                    uf_def["format"] = "uuid"
+                    uf_def["unique"] = (uuid_field == "event_id")
+
+            # Add critical quality checks for temporal ordering and sequence monotonicity
+            quality_doc = contract.get("quality")
+            if isinstance(quality_doc, dict):
+                quality_spec = quality_doc.get("specification")
+                if isinstance(quality_spec, dict):
+                    chk_list = quality_spec.get("checks")
+                    checks_list: list = chk_list if isinstance(chk_list, list) else []
+                    quality_spec["checks"] = checks_list
+
+                    existing_ids = set()
+                    for existing_chk in checks_list:
+                        if isinstance(existing_chk, dict):
+                            cid = existing_chk.get("check_id")
+                            if cid:
+                                existing_ids.add(cid)
+
+                    extra_checks = [
+                        {
+                            "check_id": f"{contract_id}.recorded_at_gte_occurred_at",
+                            "column": "recorded_at",
+                            "check": "custom",
+                            "description": "recorded_at must be >= occurred_at (temporal ordering). CRITICAL: violation = clock skew or corruption.",
+                            "severity": "CRITICAL"
+                        },
+                        {
+                            "check_id": f"{contract_id}.sequence_monotonic_per_aggregate",
+                            "column": "sequence_number",
+                            "check": "custom",
+                            "description": "sequence_number monotonically increasing per aggregate_id: no gaps, no duplicates.",
+                            "severity": "CRITICAL"
+                        },
+                        {
+                            "check_id": f"{contract_id}.event_type_pascal_case",
+                            "column": "event_type",
+                            "check": "pattern",
+                            "expected": {"pattern": "^[A-Z][a-zA-Z0-9]+$"},
+                            "severity": "HIGH"
+                        },
+                        {
+                            "check_id": f"{contract_id}.missing_event_id",
+                            "column": "event_id",
+                            "check": "missing_count",
+                            "expected": 0,
+                            "severity": "CRITICAL"
+                        },
+                        {
+                            "check_id": f"{contract_id}.duplicate_event_id",
+                            "column": "event_id",
+                            "check": "duplicate_count",
+                            "expected": 0,
+                            "severity": "CRITICAL"
+                        }
+                    ]
+                    for chk in extra_checks:
+                        if chk["check_id"] not in existing_ids:
+                            checks_list.append(chk)
+            print("[INFO] Week 5 event enrichment applied (PascalCase patterns, temporal ordering checks, sequence monotonicity)")
 
     safe_mkdir(output_dir)
     out_path = os.path.join(output_dir, f"{contract_id}.yaml")
