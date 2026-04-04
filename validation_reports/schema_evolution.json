@@ -1,0 +1,47 @@
+{
+  "report_id": "schema-evolution-week3_extractions-20260404T102651Z",
+  "contract_id": "week3_extractions",
+  "run_timestamp": "2026-04-04T10:26:51.526605+00:00",
+  "old_snapshot": "20260402T003421Z.yaml",
+  "new_snapshot": "20260402T003824Z.yaml",
+  "compatibility_verdict": "COMPATIBLE",
+  "compatibility_detail": "Schema evolution is backward-compatible.",
+  "diff": [],
+  "breaking_change_count": 0,
+  "blast_radius": {
+    "affected_consumers": 1,
+    "consumer_details": [
+      {
+        "id": "file::src/week4/cartographer.py",
+        "description": "cartographer.py (src/week4/cartographer.py)",
+        "fields_consumed": [],
+        "impact": "MEDIUM",
+        "changed_fields": []
+      }
+    ],
+    "estimated_changed_fields": 0
+  },
+  "per_consumer_impact": [
+    {
+      "id": "file::src/week4/cartographer.py",
+      "description": "cartographer.py (src/week4/cartographer.py)",
+      "fields_consumed": [],
+      "impact": "MEDIUM",
+      "changed_fields": []
+    }
+  ],
+  "migration_checklist": [
+    "Notify downstream consumers of the schema change.",
+    "Review the schema diff and identify impacted fields.",
+    "Update consumer contracts, tests, and validations for changed fields.",
+    "Validate the new schema against a sample dataset and contract rules.",
+    "Coordinate deployment timing and rollback readiness with stakeholders."
+  ],
+  "rollback_plan": [
+    "Restore the previous schema snapshot from schema_snapshots\\week3_extractions\\20260402T003421Z.yaml.",
+    "Rollback the contract and any producer changes to the prior version.",
+    "Run consumer validation checks against the restored schema.",
+    "Confirm that downstream pipelines operate successfully after rollback.",
+    "Monitor validation reports and consumer error rates until stability is restored."
+  ]
+}
