@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-04-04T16:41:41Z",
+  "section_1_data_health_score": {
+    "score": 15.0,
+    "base_score": 75.0,
+    "critical_fail_count": 3,
+    "ignored_internal_issues": 3,
+    "formula": "score = (passed / total_checks) * 100 - (critical_fail_count * 20)",
+    "narrative": "Data health is at risk. Base quality is 75.0% (18/24 checks passed). Penalty applied: 3 real CRITICAL FAIL(s) x 20 points = 60.0. 3 internal runner issue(s) were excluded from penalties, because they reflect tooling defects rather than contract producer behavior."
+  },
+  "section_2_top_violations": [
+    {
+      "check_id": "week3_extractions.extracted_facts.confidence.range",
+      "column_name": "extracted_facts[*].confidence",
+      "severity": "CRITICAL",
+      "status": "FAIL",
+      "records_failing": 4,
+      "description": "Confidence values shifted from a 0.0-1.0 scale to 0-100. This change can break downstream scoring and decision logic.",
+      "business_impact": "Confidence values shifted from a 0.0-1.0 scale to 0-100. This change can break downstream scoring and decision logic. Latest failing records: 4. Historical occurrences: 13.",
+      "affected_pipelines": [
+        "cartographer.py (src/week4/cartographer.py)",
+        "file::src/week4/cartographer.py",
+        "week4-cartographer"
+      ],
+      "latest_detected_at": "2026-04-02T03:37:01.004140Z"
+    },
+    {
+      "check_id": "week3_extractions.source_hash.format",
+      "column_name": "source_hash",
+      "severity": "CRITICAL",
+      "status": "FAIL",
+      "records_failing": 4,
+      "description": "Format mismatch can break joins, identity matching, and audit traceability.",
+      "business_impact": "Format mismatch can break joins, identity matching, and audit traceability. Latest failing records: 4. Historical occurrences: 2.",
+      "affected_pipelines": [
+        "file::src/week4/cartographer.py"
+      ],
+      "latest_detected_at": "2026-04-02T01:49:02.714929Z"
+    },
+    {
+      "check_id": "week3_extractions.token_count.type",
+      "column_name": "token_count",
+      "severity": "CRITICAL",
+      "status": "FAIL",
+      "records_failing": 4,
+      "description": "Type mismatch can produce incorrect aggregations and unstable analytics outputs.",
+      "business_impact": "Type mismatch can produce incorrect aggregations and unstable analytics outputs. Latest failing records: 4. Historical occurrences: 0.",
+      "affected_pipelines": [],
+      "latest_detected_at": ""
+    }
+  ],
+  "section_3_schema_changes": {
+    "compatibility_verdict": "COMPATIBLE",
+    "summary": "Current schema changes are backward-compatible.",
+    "changes": [
+      "No material schema field changes detected."
+    ],
+    "breaking_change_count": 0
+  },
+  "section_4_ai_system_risk_assessment": {
+    "risk_level": "HIGH",
+    "risk_points": 7,
+    "summary": "AI system risk is HIGH. Embedding baseline was recently initialized; trend confidence is limited. Data health score is low (15.0%). Critical contract violations are still present. No AI metrics telemetry files found for trend analysis.",
+    "drivers": [
+      "Embedding baseline was recently initialized; trend confidence is limited.",
+      "Data health score is low (15.0%).",
+      "Critical contract violations are still present.",
+      "No AI metrics telemetry files found for trend analysis."
+    ]
+  },
+  "section_5_recommended_actions": [
+    {
+      "priority": "P1",
+      "file_path": "src/week3/extractor.py",
+      "contract_clause": "generated_contracts/week3_extractions.yaml::quality.specification.checks[week3_extractions.extracted_facts.confidence.range]",
+      "action": "Fix `week3_extractions.extracted_facts.confidence.range` and add a regression test to prevent this contract break from recurring."
+    },
+    {
+      "priority": "P1",
+      "file_path": "src/week3/document_refinery.py",
+      "contract_clause": "generated_contracts/week3_extractions.yaml::schema.source_hash.pattern",
+      "action": "Fix `week3_extractions.source_hash.format` and add a regression test to prevent this contract break from recurring."
+    },
+    {
+      "priority": "P1",
+      "file_path": "contracts/runner.py",
+      "contract_clause": "generated_contracts/week3_extractions.yaml::quality.specification.checks",
+      "action": "Fix `week3_extractions.token_count.type` and add a regression test to prevent this contract break from recurring."
+    },
+    {
+      "priority": "P2",
+      "file_path": "contracts/schema_analyzer.py",
+      "contract_clause": "schema_evolution.monitoring",
+      "action": "Continue weekly schema diff checks to catch future breaking changes early."
+    },
+    {
+      "priority": "P2",
+      "file_path": "contracts/ai_extensions.py",
+      "contract_clause": "ai.embedding_drift_detection.threshold",
+      "action": "Run embedding drift check on each pipeline execution and block publish on FAIL."
+    }
+  ],
+  "meta": {
+    "latest_validation_source": "validation_reports\\manual_violated.json",
+    "validation_reports_scanned": 10,
+    "violation_log_records_scanned": 19,
+    "ai_metrics_files_scanned": 0,
+    "output_path": "enforcer_report\\report_data.json"
+  }
+}
