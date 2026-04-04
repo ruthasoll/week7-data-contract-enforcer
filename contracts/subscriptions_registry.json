@@ -1,0 +1,28 @@
+{
+  "subscriptions": [
+    {
+      "source": "week3-document-refinery-extractions",
+      "consumer": "week7-data-contract-enforcer",
+      "pipeline": "week7-enforcer",
+      "fields": ["doc_id", "extracted_facts", "extraction_model", "source_hash"]
+    },
+    {
+      "source": "week4-lineage-snapshots",
+      "consumer": "week7-data-contract-enforcer",
+      "pipeline": "week7-enforcer",
+      "fields": ["nodes", "edges", "captured_at"]
+    },
+    {
+      "source": "week5-events",
+      "consumer": "week7-data-contract-enforcer",
+      "pipeline": "week7-enforcer",
+      "fields": ["event_id", "event_type", "aggregate_id", "sequence_number", "payload"]
+    },
+    {
+      "source": "langsmith-verdicts",
+      "consumer": "week7-data-contract-enforcer",
+      "pipeline": "week7-enforcer",
+      "fields": ["verdict_id", "overall_verdict", "overall_score", "confidence", "evaluated_at"]
+    }
+  ]
+}
