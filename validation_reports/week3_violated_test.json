@@ -1,8 +1,8 @@
 {
-  "report_id": "27c1b7f2-8923-473b-ad94-67199f0f7d1f",
+  "report_id": "dc8ee03e-2161-44a5-b415-17ba9b7b93fb",
   "contract_id": "week3_extractions",
   "snapshot_id": "b71fc0b1691747eb68d96095f08a0fb7d7a1db8d32e360aa4895ec23ca2e5bb2",
-  "run_timestamp": "2026-04-01T22:48:48Z",
+  "run_timestamp": "2026-04-04T18:24:01Z",
   "total_checks": 24,
   "passed": 18,
   "failed": 5,

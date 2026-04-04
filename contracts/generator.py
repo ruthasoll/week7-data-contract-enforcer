@@ -5,7 +5,7 @@ contracts/generator.py
 ContractGenerator: infer Bitol DataContract YAML and dbt tests from a JSONL source.
 
 Usage (example for Week 3):
-  python contracts/generator.py --source outputs/week3/extractions.jsonl --output-dir generated_contracts
+  python contracts/generator.py --source outputs/week3/extractions.jsonl --contract-id week3-document-refinery-extractions --lineage outputs/week4/lineage_snapshots.jsonl --output generated_contracts
 
 Key features implemented (per challenge):
  - Structural profiling (including explode of extracted_facts[])
@@ -27,12 +27,21 @@ import yaml
 import math
 from collections import defaultdict
 
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
+
 # -------------------------
 # Helpers
 # -------------------------
 UUID_REGEX = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 SHA256_REGEX = r'^[a-f0-9]{64}$'
 ISO_DATETIME_SAMPLE = '2025-01-15T14:23:00Z'
+PROFILE_BASELINES_PATH = os.path.join("schema_snapshots", "profiling_baselines.json")
+
+if load_dotenv:
+    load_dotenv()
 
 def load_jsonl(path):
     if not os.path.exists(path):
@@ -44,6 +53,124 @@ def safe_mkdir(path):
 
 def iso_ts_now():
     return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def load_profile_baselines():
+    if not os.path.exists(PROFILE_BASELINES_PATH):
+        return {}
+    try:
+        with open(PROFILE_BASELINES_PATH, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def save_profile_baselines(payload):
+    safe_mkdir(os.path.dirname(PROFILE_BASELINES_PATH))
+    with open(PROFILE_BASELINES_PATH, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, sort_keys=True)
+
+
+def persist_numeric_profile_baseline(contract_id, numeric_profiles):
+    """Persist mean/stddev profiles to a separate baseline store for drift context."""
+    baselines = load_profile_baselines()
+    contract_store = baselines.get(contract_id, {})
+    now = iso_ts_now()
+    for col_name, stats in numeric_profiles.items():
+        if not isinstance(stats, dict):
+            continue
+        contract_store[col_name] = {
+            "mean": stats.get("mean"),
+            "stddev": stats.get("stddev"),
+            "minimum": stats.get("min"),
+            "maximum": stats.get("max"),
+            "updated_at": now,
+        }
+    baselines[contract_id] = contract_store
+    save_profile_baselines(baselines)
+
+
+def detect_suspicious_distribution_warnings(numeric_profiles):
+    """Generate warnings for suspicious numeric distributions."""
+    warnings = []
+    for col_name, stats in numeric_profiles.items():
+        if not isinstance(stats, dict):
+            continue
+        mean = stats.get("mean")
+        if mean is None:
+            continue
+        try:
+            mean_f = float(mean)
+        except Exception:
+            continue
+        if "confidence" in col_name.lower() and (mean_f <= 0.05 or mean_f >= 0.95):
+            warnings.append({
+                "column": col_name,
+                "warning": "confidence mean is near an extreme (0 or 1); investigate calibration/drift risk",
+                "mean": mean_f,
+                "severity": "MEDIUM",
+            })
+        elif 0.0 <= mean_f <= 0.01:
+            warnings.append({
+                "column": col_name,
+                "warning": "distribution mean is near zero; validate upstream extraction/population logic",
+                "mean": mean_f,
+                "severity": "LOW",
+            })
+    return warnings
+
+
+def annotate_ambiguous_columns(profiles):
+    """
+    Optional LLM-assisted annotations for ambiguous object columns.
+    Falls back to deterministic heuristics if no API key/SDK is available.
+    """
+    ambiguous = {}
+    candidates = []
+    for col, meta in profiles.items():
+        dtype = str(meta.get("dtype", ""))
+        if dtype != "object":
+            continue
+        if meta.get("dominant_pattern"):
+            continue
+        if int(meta.get("cardinality", 0)) <= 1:
+            continue
+        candidates.append((col, meta))
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    client = None
+    if api_key:
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+        except Exception:
+            client = None
+
+    for col, meta in candidates:
+        sample_values = meta.get("sample_values", [])
+        if client:
+            try:
+                prompt = (
+                    "You are annotating a data contract column. "
+                    f"Column: {col}. "
+                    f"Sample values: {sample_values}. "
+                    "Return one short line: likely semantic meaning and risk if misinterpreted."
+                )
+                resp = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                )
+                text = getattr(resp, "text", None) or ""
+                if text.strip():
+                    ambiguous[col] = text.strip()
+                    continue
+            except Exception:
+                pass
+        ambiguous[col] = (
+            f"Ambiguous object column with no dominant pattern. "
+            f"Sample values suggest manual semantic review is required: {sample_values}"
+        )
+    return ambiguous
 
 def detect_string_pattern(values):
     # simple heuristics to detect uuid / sha256 / iso-datetime / url
@@ -204,8 +331,18 @@ def find_downstream_consumers(lineage_snapshot, source_hint=None):
     edges = lineage_snapshot.get('edges', [])
     node_map = {n['node_id']: n for n in nodes}
     consumers = []
+    source_hint_l = (source_hint or "").lower()
+    source_node_ids = set()
+    for nid, node in node_map.items():
+        md = node.get("metadata", {}) if isinstance(node, dict) else {}
+        path = str(md.get("path", "") or "").lower()
+        label = str(node.get("label", "") or "").lower()
+        if source_hint_l and (source_hint_l in path or pathlib.Path(source_hint_l).name in path or "extraction" in label):
+            source_node_ids.add(nid)
+
     for e in edges:
         rel = e.get('relationship', '')
+        src = e.get('source')
         tgt = e.get('target')
         target_node = node_map.get(tgt)
         if not target_node:
@@ -216,13 +353,20 @@ def find_downstream_consumers(lineage_snapshot, source_hint=None):
         candidate = False
         if 'cartograph' in path.lower() or 'cartographer' in path.lower() or 'week4' in path.lower() or 'cartograph' in label.lower():
             candidate = True
-        if rel in ('CONSUMES', 'READS') and ('week3' in (node_map.get(e.get('source'), {}).get('metadata', {}).get('path','') or '') or 'extraction' in (node_map.get(e.get('source'), {}).get('label','') or '').lower()):
+        if rel in ('CONSUMES', 'READS') and (
+            src in source_node_ids or
+            'week3' in (node_map.get(src, {}).get('metadata', {}).get('path','') or '') or
+            'extraction' in (node_map.get(src, {}).get('label','') or '').lower()
+        ):
             candidate = True
         if candidate:
+            consumed_fields = target_node.get("metadata", {}).get("fields_consumed", [])
+            if not isinstance(consumed_fields, list):
+                consumed_fields = []
             consumers.append({
                 "id": target_node.get('node_id'),
                 "description": f"{target_node.get('label')} ({path})",
-                "fields_consumed": []
+                "fields_consumed": consumed_fields
             })
     if not consumers:
         for n in nodes:
@@ -236,7 +380,7 @@ def find_downstream_consumers(lineage_snapshot, source_hint=None):
 # -------------------------
 # Contract generation
 # -------------------------
-def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric_profiles, confidence_fields, lineage_consumers):
+def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric_profiles, confidence_fields, lineage_consumers, profile_warnings=None, ambiguous_annotations=None):
     now = iso_ts_now()
     schema_dict: dict = {}
     quality_checks: list = []
@@ -344,14 +488,16 @@ def build_bitol_contract(contract_id, info_title, source_path, profiles, numeric
         "schema": schema_dict,
         "quality": {
             "type": "SodaChecks",
-            "specification": {"checks": quality_checks}
+            "specification": {"checks": quality_checks},
+            **({"warnings": profile_warnings} if profile_warnings else {})
         },
         "lineage": {
             "upstream": lineage_upstream,
             "downstream": lineage_downstream,
             **({"breaking_if_changed": lineage_breaking} if lineage_breaking else {})
         },
-        "generated_at": now
+        "generated_at": now,
+        **({"annotations": {"ambiguous_columns": ambiguous_annotations}} if ambiguous_annotations else {})
     }
     return contract
 
@@ -468,30 +614,39 @@ def generate_dbt_tests(contract, dbt_outpath):
 # -------------------------
 def main():
     parser = argparse.ArgumentParser(description="ContractGenerator: generate Bitol contract + dbt tests from JSONL")
-    parser.add_argument("--source", required=True, help="Path to source JSONL (e.g. outputs/week3/extractions.jsonl)")
-    parser.add_argument("--output-dir", default="generated_contracts", help="Directory to write generated contracts")
-    parser.add_argument("--lineage", default="outputs/week4/lineage_snapshots.jsonl", help="Path to week4 lineage snapshots JSONL (optional)")
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Path to input JSONL file (e.g. outputs/week3/extractions.jsonl)",
+    )
+    parser.add_argument(
+        "--contract-id",
+        required=True,
+        help="Contract identifier (e.g. week3-document-refinery-extractions)",
+    )
+    parser.add_argument(
+        "--lineage",
+        required=True,
+        help="Path to lineage snapshots JSONL (e.g. outputs/week4/lineage_snapshots.jsonl)",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="Output directory for generated contract files",
+    )
     args = parser.parse_args()
 
     source = args.source
-    output_dir = args.output_dir
+    contract_id = args.contract_id
     lineage_path = args.lineage
+    output_dir = args.output
 
     if not os.path.exists(source):
         print(f"[ERROR] source not found: {source}", file=sys.stderr)
         sys.exit(2)
 
     safe_mkdir(output_dir)
-
     basename = pathlib.Path(source).stem
-    parts = pathlib.Path(source).parts
-    week_token = None
-    for p in parts:
-        if p.lower().startswith("week"):
-            week_token = p
-            break
-    contract_id = f"{week_token}_{basename}" if week_token else f"{basename}"
-    contract_id = contract_id.replace("-", "_")
 
     try:
         df = load_jsonl(source)
@@ -539,7 +694,25 @@ def main():
     lineage_consumers = find_downstream_consumers(lineage_snapshot, source)
 
     info_title = f"Auto-generated contract for {basename}"
-    contract = build_bitol_contract(contract_id, info_title, source, profiles, numeric_profiles, confidence_fields, lineage_consumers)
+    profile_warnings = detect_suspicious_distribution_warnings(numeric_profiles)
+    ambiguous_annotations = annotate_ambiguous_columns(profiles)
+    contract = build_bitol_contract(
+        contract_id,
+        info_title,
+        source,
+        profiles,
+        numeric_profiles,
+        confidence_fields,
+        lineage_consumers,
+        profile_warnings=profile_warnings,
+        ambiguous_annotations=ambiguous_annotations,
+    )
+
+    try:
+        persist_numeric_profile_baseline(contract_id, numeric_profiles)
+        print(f"[INFO] saved numeric profile baselines to {PROFILE_BASELINES_PATH}")
+    except Exception as e:
+        print(f"[WARN] failed to persist numeric profile baselines: {e}", file=sys.stderr)
 
     lineage_dict = contract.get("lineage")
     if isinstance(lineage_dict, dict):

@@ -199,7 +199,7 @@ def save_baselines(baselines):
 
 # Main check runner
 
-def run_checks(contract, df, snapshot_id):
+def run_checks(contract, df, snapshot_id, mode="WARN"):
     results = []
     total_checks = 0
     passed = failed = warned = errored = 0
@@ -901,6 +901,41 @@ def run_checks(contract, df, snapshot_id):
         "errored": errored,
         "results": results
     }
+    # Mode-dependent enforcement decision while keeping check computation identical.
+    mode_u = str(mode or "WARN").upper()
+    blocking_violations = 0
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        status = str(r.get("status", "")).upper()
+        severity = str(r.get("severity", "")).upper()
+        if status == STATUS_FAIL and severity in {SEVERITY_CRITICAL, SEVERITY_HIGH}:
+            blocking_violations += 1
+        # Confidence and drift remain independent check paths but are always considered blocking in ENFORCE.
+        chk_id = str(r.get("check_id", "")).lower()
+        chk_type = str(r.get("check_type", "")).lower()
+        if status == STATUS_FAIL and mode_u == "ENFORCE" and (
+            "confidence" in chk_id or chk_type == "statistical_drift" or "statistical_drift" in chk_id
+        ):
+            blocking_violations += 1
+
+    if mode_u == "AUDIT":
+        should_block = False
+    elif mode_u == "WARN":
+        should_block = False
+    else:  # ENFORCE
+        should_block = blocking_violations > 0
+
+    report["mode"] = mode_u
+    report["enforcement"] = {
+        "should_block": should_block,
+        "blocking_violations": int(blocking_violations),
+        "decision": (
+            "BLOCK" if should_block else
+            "WARN_ONLY" if mode_u == "WARN" else
+            "AUDIT_ONLY"
+        )
+    }
     return report
 
 
@@ -909,6 +944,12 @@ def main():
     parser.add_argument("--contract", required=True, help="Path to contract YAML (Bitol)")
     parser.add_argument("--data", required=True, help="Path to data JSONL file")
     parser.add_argument("--output", required=True, help="Path to write validation report JSON")
+    parser.add_argument(
+        "--mode",
+        choices=["AUDIT", "WARN", "ENFORCE"],
+        default="WARN",
+        help="Execution mode: AUDIT (observe), WARN (observe + surface warnings), ENFORCE (block on policy violations).",
+    )
     args = parser.parse_args()
 
     contract_path = args.contract
@@ -932,7 +973,7 @@ def main():
     except Exception:
         snapshot_id = ""
 
-    report = run_checks(contract, df, snapshot_id)
+    report = run_checks(contract, df, snapshot_id, mode=args.mode)
 
     # write output
     safe_dir = os.path.dirname(out_path)
@@ -942,6 +983,9 @@ def main():
         json.dump(report, fh, indent=2, sort_keys=False)
 
     print(f"Wrote validation report: {out_path}")
+    # Exit non-zero only when ENFORCE mode blocks publication.
+    if str(args.mode).upper() == "ENFORCE" and report.get("enforcement", {}).get("should_block"):
+        sys.exit(4)
 
 if __name__ == '__main__':
     main()
