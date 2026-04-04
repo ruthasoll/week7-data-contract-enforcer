@@ -126,43 +126,76 @@ def compute_blast_radius_from_registry(
     producer_ids: List[str],
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Return (affected_nodes_enriched, traversal_steps).
+    Registry-first blast radius with dependency traversal.
+
+    contamination_depth is derived from graph distance (hops), while respecting
+    declared depth when it is greater.
     """
     print("Using subscriptions registry to calculate blast radius...")
-    steps: List[str] = []
-    out_nodes: List[Dict[str, Any]] = []
-    seen = set()
-    producer_set = set(producer_ids)
+
+    # Build adjacency list from registry rows.
+    adjacency: Dict[str, List[Dict[str, Any]]] = {}
     for row in registry_rows:
-        producer_id = str(row.get("producer_id", "")).strip()
-        if producer_id not in producer_set:
+        prod = str(row.get("producer_id", "")).strip()
+        if not prod:
             continue
-        consumer_id = str(row.get("consumer_id", "")).strip()
-        dep_type = str(row.get("dependency_type", "")).strip().lower()
-        depth = int(row.get("contamination_depth", 0) or 0)
-        fields = row.get("fields_consumed", [])
-        if not isinstance(fields, list):
-            fields = []
-        desc = str(row.get("description", "")).strip()
-        key = (producer_id, consumer_id, depth)
-        if key in seen:
-            continue
-        seen.add(key)
-        relation = "direct" if dep_type == "direct" else "transitive"
-        steps.append(
-            f"{producer_id} -> {consumer_id} ({relation}, contamination_depth={depth})"
-        )
-        out_nodes.append(
-            {
-                "producer_id": producer_id,
-                "consumer_id": consumer_id,
-                "dependency_type": relation,
-                "contamination_depth": depth,
-                "fields_consumed": fields,
-                "description": desc,
-            }
-        )
-    return out_nodes, steps
+        adjacency.setdefault(prod, []).append(row)
+
+    # BFS traversal over subscription graph.
+    steps: List[str] = []
+    visited_depth: Dict[str, int] = {}
+    queue: List[Tuple[str, int, str]] = []  # (producer_id, hop_depth, root_source)
+    for p in producer_ids:
+        queue.append((p, 0, p))
+        visited_depth[p] = 0
+
+    enriched: List[Dict[str, Any]] = []
+    seen_edges = set()
+
+    while queue:
+        producer, hop_depth, root_source = queue.pop(0)
+        for edge in adjacency.get(producer, []):
+            consumer_id = str(edge.get("consumer_id", "")).strip()
+            if not consumer_id:
+                continue
+
+            declared_depth = int(edge.get("contamination_depth", 0) or 0)
+            derived_depth = hop_depth + 1
+            contamination_depth = max(derived_depth, declared_depth)
+            dependency_type = "direct" if contamination_depth == 1 else "transitive"
+
+            edge_key = (producer, consumer_id, contamination_depth)
+            if edge_key in seen_edges:
+                continue
+            seen_edges.add(edge_key)
+
+            fields = edge.get("fields_consumed", [])
+            if not isinstance(fields, list):
+                fields = []
+            description = str(edge.get("description", "")).strip()
+
+            steps.append(
+                f"{producer} -> {consumer_id} ({dependency_type}, contamination_depth={contamination_depth})"
+            )
+            enriched.append(
+                {
+                    "producer_id": producer,
+                    "consumer_id": consumer_id,
+                    "dependency_type": dependency_type,
+                    "contamination_depth": contamination_depth,
+                    "fields_consumed": fields,
+                    "description": description,
+                    "source_root": root_source,
+                }
+            )
+
+            # Continue traversal for transitive contamination discovery.
+            prev = visited_depth.get(consumer_id)
+            if prev is None or derived_depth < prev:
+                visited_depth[consumer_id] = derived_depth
+                queue.append((consumer_id, derived_depth, root_source))
+
+    return enriched, steps
 
 
 def fallback_blast_radius_from_lineage(lineage_snapshot: Optional[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -374,4 +407,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
