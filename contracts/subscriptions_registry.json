@@ -1,28 +1,36 @@
 {
   "subscriptions": [
     {
-      "source": "week3-document-refinery-extractions",
-      "consumer": "week7-data-contract-enforcer",
-      "pipeline": "week7-enforcer",
-      "fields": ["doc_id", "extracted_facts", "extraction_model", "source_hash"]
+      "producer_id": "week3-document-refinery-extractions",
+      "consumer_id": "week4-brownfield-cartographer",
+      "dependency_type": "direct",
+      "contamination_depth": 1,
+      "fields_consumed": ["doc_id", "extracted_facts", "extraction_model"],
+      "description": "Cartographer directly consumes extraction payloads to build graph nodes."
     },
     {
-      "source": "week4-lineage-snapshots",
-      "consumer": "week7-data-contract-enforcer",
-      "pipeline": "week7-enforcer",
-      "fields": ["nodes", "edges", "captured_at"]
+      "producer_id": "week3-document-refinery-extractions",
+      "consumer_id": "week5-event-sourcing",
+      "dependency_type": "transitive",
+      "contamination_depth": 2,
+      "fields_consumed": ["doc_id", "extracted_facts.confidence", "source_hash"],
+      "description": "Event-sourcing receives transformed extraction outputs via intermediate cartography flows."
     },
     {
-      "source": "week5-events",
-      "consumer": "week7-data-contract-enforcer",
-      "pipeline": "week7-enforcer",
-      "fields": ["event_id", "event_type", "aggregate_id", "sequence_number", "payload"]
+      "producer_id": "week1-intent-records",
+      "consumer_id": "week2-digital-courtroom",
+      "dependency_type": "direct",
+      "contamination_depth": 1,
+      "fields_consumed": ["intent_id", "intent_text", "created_at"],
+      "description": "Digital courtroom scoring directly relies on intent records."
     },
     {
-      "source": "langsmith-verdicts",
-      "consumer": "week7-data-contract-enforcer",
-      "pipeline": "week7-enforcer",
-      "fields": ["verdict_id", "overall_verdict", "overall_score", "confidence", "evaluated_at"]
+      "producer_id": "week5-event-sourcing",
+      "consumer_id": "downstream-ai-agents",
+      "dependency_type": "transitive",
+      "contamination_depth": 2,
+      "fields_consumed": ["event_type", "payload", "sequence_number", "occurred_at"],
+      "description": "Downstream AI agents consume event streams indirectly through orchestration layers."
     }
   ]
 }
